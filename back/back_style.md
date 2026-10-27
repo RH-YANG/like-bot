@@ -17,7 +17,7 @@ FastAPI + PostgreSQL(psycopg2) 백엔드 개발 컨벤션.
 | `database/dto.py` | API 요청·응답 모델 |
 | `database/dbms_control.py` | DB 커넥션·커서 주입과 반환 |
 | `job/` | 비동기 작업 체인·큐·워커 |
-| `llm/`, `config/` | LLM 구현과 조정값, `config/legal/`의 운영 약관 문서 |
+| `llm/`, `config/` | LLM 구현과 조정값, `config/legal/`의 약관 문서 |
 | `env.py`, `main.py` | 환경변수 로드, 앱 초기화와 라우터 등록 |
 
 - 기본 호출 방향은 `api → service → dao`이며 역방향 호출을 금지한다.

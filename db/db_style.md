@@ -1,6 +1,6 @@
 # DB Convention
 
-PostgreSQL 18 스키마 설계·운영 컨벤션. 개발·운영 모두 Docker 컨테이너를 사용한다.
+PostgreSQL 18의 로컬 스키마 설계·관리 컨벤션. Docker 컨테이너를 사용한다.
 
 ## 목차
 
@@ -94,7 +94,6 @@ CREATE TABLE my_protein (
 db/
 ├── Dockerfile              # PostgreSQL 이미지 빌드 정의
 ├── db_style.md             # DB 개발 컨벤션 (이 파일)
-├── upgrade.sql             # 운영 DB를 다음 버전으로 올리는 변경 SQL
 └── schema.sql              # 현재 DB 스키마 스냅샷 (git으로 이력 추적)
 ```
 
@@ -104,12 +103,12 @@ db/
 
 | 항목 | 값 |
 |---|---|
-| 컨테이너명 | `tmx-db` (compose 서비스명은 `db` — 내부 네트워크 호스트명으로 사용) |
-| 이미지 | `./db/Dockerfile` 빌드 (`postgres:18`, 개발·운영 공통) |
-| 포트 | 호스트 `5432` → 컨테이너 `5432` (개발 Compose 고정) |
+| 컨테이너명 | `like-bot-db` (compose 서비스명은 `db` — 내부 네트워크 호스트명으로 사용) |
+| 이미지 | `./db/Dockerfile` 빌드 (`postgres:18`) |
+| 포트 | 호스트 `127.0.0.1:5433` → 컨테이너 `5432` |
 | 데이터 볼륨 | named volume `db-data` → `/var/lib/postgresql` (PGDATA: `/var/lib/postgresql/18/docker`) |
 | 타임존 | UTC (Dockerfile `ENV TZ=UTC` — 초기화 시점에 적용) |
-| 네트워크 | `tmx-net` |
+| 네트워크 | `like-bot-net` |
 | Healthcheck | `pg_isready -U ${DB_USER} -d ${DB_NAME}` (10초 간격, 최대 5회, 초기화 유예 30초) |
 
 환경변수(`DB_USER`, `DB_PWD`, `DB_NAME`)는 루트의 `.env`에서 관리한다.
@@ -122,17 +121,18 @@ db/
 
 ### schema.sql 갱신
 
-스키마 변경은 세 곳을 함께 반영한다.
+스키마 변경은 로컬 DB와 스냅샷에 함께 반영한다.
 
-1. `tmx-db` 컨테이너에 DDL을 적용한다 (소스 오브 트루스).
-   ```bash
-   docker exec -i tmx-db psql -U {DB_USER} -d {DB_NAME} < db/upgrade.sql
+1. `like-bot-db` 컨테이너에서 변경 DDL을 적용한다 (소스 오브 트루스).
+   ```powershell
+   docker compose exec db psql -U like_bot -d like_bot
    ```
+   사용자·DB 이름은 루트 `.env`의 값에 맞춘다. 관련 DDL은 가능한 한 하나의 트랜잭션으로 처리한다.
 2. `schema.sql`에 같은 스키마를 이 문서의 스타일(정렬·인라인 주석·제약조건 네이밍)대로 수기 반영한다.
-3. 운영 DB에 적용할 변경 사항을 `upgrade.sql`에 작성한다.
+3. back의 `schema.py`, DTO, DAO와 관련 테스트를 함께 갱신한다.
 
-- `pg_dump`로 덮어쓰지 않는다 — 인라인 주석(`-- female | male` 등)이 전부 사라져 데이터 사전이 소실된다.
-- 배포 SQL 파일명은 `upgrade.sql`로 고정한다. 새 날짜 파일을 만들지 않고 내용을 갱신하며, 과거 배포 SQL은 Git 이력으로 확인한다.
-- `upgrade.sql`은 가능한 한 하나의 트랜잭션으로 작성하고 재실행해도 같은 결과가 되도록 구성한다.
-- 운영 환경은 배포 순서대로 각 Git 버전의 `upgrade.sql`을 적용한다. 중간 배포를 건너뛴 환경은 누락된 버전의 SQL을 Git 이력에서 순서대로 적용한다.
-- 대량 데이터 이전·적재처럼 일반 배포와 분리해야 하는 작업만 별도 `data_migration/` 폴더에 둔다.
+- `schema.sql`은 빈 DB 볼륨의 최초 초기화에도 사용한다. 기존 DB에는 재빌드·재기동만으로 적용되지 않는다.
+- 별도 변경 SQL 파일을 누적하지 않으며 스키마 변경 이력은 Git에서 확인한다.
+- `pg_dump`로 `schema.sql`을 덮어쓰지 않는다. 인라인 주석이 사라져 데이터 사전이 소실된다.
+- DB 백업은 `pg_dump`를 사용한다. 실행 중인 데이터 디렉터리를 단순 복사하지 않는다.
+- `docker compose down`은 데이터를 유지한다. `down -v`는 DB와 브라우저 로그인 상태를 모두 삭제하므로 전체 초기화가 필요할 때만 사용한다.
