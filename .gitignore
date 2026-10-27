@@ -1,0 +1,45 @@
+# ========== 에디터 ==========
+settings.json
+
+# ========== 환경변수·비밀값 ==========
+.env
+.env.*
+!.env.example
+
+# ========== Python (back) ==========
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ========== Node (front) ==========
+node_modules/
+dist/
+*.local
+npm-debug.log*
+.vite/
+*.tsbuildinfo
+
+# ========== 브라우저 자동화 산출물 ==========
+test-results/
+playwright-report/
+*.trace.zip
+
+# ========== DB 백업 (pg_dump) ==========
+# db/schema.sql은 스냅샷이므로 추적한다
+*.dump
+backup/
+
+# ========== 로그 ==========
+*.log
+logs/
+
+# ========== OS ==========
+.DS_Store
+Thumbs.db
+desktop.ini

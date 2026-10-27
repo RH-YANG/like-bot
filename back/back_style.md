@@ -14,10 +14,11 @@ FastAPI + PostgreSQL(psycopg2) 백엔드 개발 컨벤션.
 | `util/test/` | 서비스·DB·외부 연동 회귀 테스트 |
 | `database/dao/*_dao.py` | SQL 실행과 조회 결과 매핑 |
 | `database/schema.py` | DB에 직접 구현된 테이블의 모델 |
+| `database/schema_enum.py` | 테이블 enum성 컬럼 중 분기·상태 전이에 쓰는 값 목록(`StrEnum`) |
 | `database/dto.py` | API 요청·응답 모델 |
 | `database/dbms_control.py` | DB 커넥션·커서 주입과 반환 |
-| `job/` | 비동기 작업 체인·큐·워커 |
-| `llm/`, `config/` | LLM 구현과 조정값, `config/legal/`의 약관 문서 |
+| `job/` | 비동기 작업 체인·큐 |
+| `llm/`, `config/` | LLM 구현, 주제별 조정값 |
 | `env.py`, `main.py` | 환경변수 로드, 앱 초기화와 라우터 등록 |
 
 - 기본 호출 방향은 `api → service → dao`이며 역방향 호출을 금지한다.
@@ -46,7 +47,7 @@ return chat_room_list
 
 - DAO는 테이블당 하나, 파일명은 정확히 `{table}_dao.py`. 담당 테이블만 변경하며 조회용 JOIN·서브쿼리는 허용한다.
 - Service는 `{domain}_service.py`. 응집성과 기존 구조에 따라 관련 테이블을 통합하며, 테이블별로 불필요하게 분리·개명하지 않는다.
-  예: `log_service`는 `log_event`·`log_error`, `auth_service`는 `auth_session`·`oauth_account`를 담당할 수 있다.
+  예: `log_service`는 `log_event`·`log_error`를 담당할 수 있다.
 - 여러 테이블의 변경은 Service에서 DAO·Service를 조합해 한 트랜잭션으로 처리한다.
 - Service는 도메인 조건과 실패 원인을 판단하고, DAO는 SQL 실행만 담당한다.
 - DAO의 첫 인자는 `cur`이다. 커넥션 생성·반환과 `commit`·`rollback`은 하지 않는다.
@@ -59,7 +60,6 @@ return chat_room_list
 
 - Service는 내부 도메인을 위한 레이어이다. 외부 서비스의 인증·API 호출·서명 검증·응답 파싱은 `util/client/`에 둔다.
 - 외부 클라이언트 파일은 `{외부 서비스명}.py`로 명명한다.
-  예: `util/client/apple_store.py`.
 - `util/handler/`에는 각종 핸들러를 위치시킨다.
 - `util/test/`에는 각종 테스트 파일을 위치시킨다.
 
@@ -77,11 +77,9 @@ return chat_room_list
 - 커넥션 풀과 커서의 생성·반환은 데코레이터가 담당한다. 조회에는 `DictCursor`를 사용한다.
 - 같은 작업에서 함께 성공해야 하는 변경은 하나의 진입 함수에서 처리하고 마지막에 한 번
   커밋한다. 내부 함수에서 다른 `@connect_db` 함수를 호출해 트랜잭션을 분리하지 않는다.
-- 부모·자식 생성, 상태 변경과 이력 저장, JobSession·Job 등록, 토큰 회전은 같은 트랜잭션에 묶는다.
+- 부모·자식 생성, 상태 변경과 이력 저장, JobSession·Job 등록은 같은 트랜잭션에 묶는다.
 - 변경 전에 소유권과 현재 상태를 같은 트랜잭션에서 다시 확인한다. 선행 조회 결과만 믿지 않는다.
 - 동시 변경과 경쟁하는 조회에는 필요에 따라 행 잠금을 사용하고, 잠금 순서를 일관되게 유지한다.
-- 결제 상태 동기화는 회원 행 잠금 → 외부 최신 상태 조회 → 결제·이용권 저장 → 커밋 순서로 처리한다.
-  앱 요청·복원·웹훅이 같은 잠금을 사용하며, 잠금 전에 조회한 외부 상태를 저장하지 않는다.
 - `Depends()`에 직접 사용하는 함수에는 `@connect_db`를 붙이지 않는다.
   일반 시그니처의 의존성 함수에서 별도 DB 진입 함수를 호출한다.
 
@@ -109,8 +107,8 @@ def create_potion(conn, cur, potion, auto_generate_shadow, member):
 - 입력 검증 실패는 400, 조회 대상 부재는 404로 처리한다. 인증·권한·상태 충돌은 원인에 맞게 구분한다.
 - 실행됐어야 할 DML의 실패는 `db_fail_routine(conn)`으로 롤백하고 503을 반환한다.
   정상적인 조회 부재나 이미 교체된 Job 회차를 DML 실패로 취급하지 않는다.
-- 리프레시 토큰은 서비스에서 SHA-256 해시로 저장·비교한다.
-  재사용을 위해 복호화가 필요한 빌링키 등은 인증 암호화로 보관한다. 민감값의 평문 저장은 금지한다.
+- 민감값의 평문 저장은 금지한다. 비교만 필요한 값은 SHA-256 해시로 저장·비교하고,
+  재사용을 위해 복호화가 필요한 값은 인증 암호화로 보관한다.
 
 ## 3. 모델과 SQL
 
@@ -118,9 +116,13 @@ def create_potion(conn, cur, potion, auto_generate_shadow, member):
 
 - DB에 직접 구현된 테이블의 모델만 `database/schema.py`에 둔다.
   API 요청·응답 모델은 `database/dto.py`에 둔다.
+  enum성 컬럼 중 코드에서 분기·상태 전이에 쓰는 값은 `database/schema_enum.py`에 `StrEnum`으로 선언한다.
+  멤버명은 UPPER_SNAKE_CASE, 값은 소문자 snake_case로 쓰고, 코드에서는 문자열 대신 멤버(`RunStatus.RUNNING`)로 비교·대입한다.
+  값이 적고 분기에 거의 쓰지 않는 컬럼은 모델에 직접 `Literal['a', 'b']`로 선언한다.
+  어느 방식이든 값은 `schema.sql`의 인라인 주석과 일치시킨다.
   조인·집계 조회만을 위한 중간 모델을 `schema.py`에 추가하지 않는다. 기존 응답 모델을 먼저 재사용한다.
   외부 연동 전용 모델은 해당 `util/client/*.py`에 모으며, Service에서는 모델 선언을 지양한다.
-  외부 연동 모델의 선언 위치와 관계없이 내부 상품 매핑·도메인 검증·지급 판단은 Service에서 수행한다.
+  외부 연동 모델의 선언 위치와 관계없이 도메인 검증·판단은 Service에서 수행한다.
 - 내부 모델의 NOT NULL 컬럼은 필수 타입, nullable 컬럼은 `Optional[T] = None`으로 선언한다.
   DB가 자동 생성하는 필드는 NOT NULL이어도 `Optional[T] = None`으로 둔다.
 - 요청의 필수 필드는 필수 타입으로 선언한다. 선택 필드는 `Optional[T] = None`을 기본으로 하며,
@@ -138,7 +140,6 @@ def create_potion(conn, cur, potion, auto_generate_shadow, member):
   모델 필드를 다시 tuple로 풀거나 개별 인자를 임시 dict로 감싸지 않는다.
 - 값은 문자열 보간하지 않는다. 동적 컬럼명 등 식별자는 허용 목록으로 검증한 뒤 삽입한다.
 - 상태 전이 UPDATE의 `WHERE`에는 기대하는 현재 상태를 포함한다.
-  워커의 변경에는 실행 회차 등 점유 조건도 포함한다.
 
 ```python
 query = '''
@@ -147,9 +148,8 @@ query = '''
          , finished_at = CURRENT_TIMESTAMP
      WHERE id = %s
        AND status = 'processing'
-       AND attempt_count = %s
 '''
-cur.execute(query, (job_id, attempt_count))
+cur.execute(query, (job_id,))
 ```
 
 ## 4. 이름과 코드 형식
@@ -176,7 +176,7 @@ cur.execute(query, (job_id, attempt_count))
 ### 반환값
 
 - 값을 반환할 때는 반환 대상의 의미가 드러나는 이름으로 변수를 선언·할당하고, 그 변수를 `return`한다.
-  `result`, `data`처럼 대상이 불분명한 이름보다 `apple_product_id`, `chat_room_list`처럼 구체적인 이름을 사용한다.
+  `result`, `data`처럼 대상이 불분명한 이름보다 `job_session_id`, `chat_room_list`처럼 구체적인 이름을 사용한다.
 - 함수 호출·객체 생성·연산·삼항 조건식을 반환문에 직접 작성하지 않는다.
   조건에 따른 값 선택은 별도 분기로 처리하고, 최종 반환 변수에 할당한다.
 - 이 규칙은 모든 레이어의 함수·메서드·`@property`에 공통으로 적용하며 API 응답 모델도 예외로 두지 않는다.
@@ -198,6 +198,7 @@ cur.execute(query, (job_id, attempt_count))
 
 - API 라우트 본문의 첫 줄에는 기능과 호출자가 알아야 할 정보를 간결한 docstring으로 작성한다.
 - Service 함수의 첫 줄에는 `# →`로 기능을 설명한다.
+- `schema.py`의 테이블 모델은 클래스 첫 줄에 `'''` 여러 줄 docstring으로 테이블명과 목적·제약을 적는다.
 - 파일 역할 설명은 임포트 뒤에 `# ========== 설명 ==========` 형식으로 작성한다.
 - 복합 API와 서로 다른 처리를 조합하는 긴 Service 함수에는 주요 단계별 번호 주석을 붙인다.
   짧은 단일 조회·변환·상태 변경에는 번호 주석을 붙이지 않는다.
@@ -209,7 +210,8 @@ cur.execute(query, (job_id, attempt_count))
   `datetime.now(timezone.utc)`로 얻고 DB 세션의 timezone도 UTC로 유지한다.
 - 사용자 표시와 LLM 프롬프트·생성 로그의 시각 표기는 필요에 따라 `Asia/Seoul`로 변환한다.
 - 환경변수는 `env.py`에서만 읽고 이름·기본값·타입 변환을 관리한다. 호출부는 `import env`를 사용한다.
-- LLM 조정값은 `config/llm.py`, 페이지 크기·초기 지급량 같은 비즈니스 상수는 해당 도메인에 둔다.
+- 한 번 정해두고 코드로 관리하는 조정값은 `config/{주제}.py`에 둔다(`config/llm.py`, `config/platform.py`).
+  페이지 크기 같은 비즈니스 상수는 해당 도메인에 둔다.
   API 키·비밀번호·암호화 키는 환경변수로 관리한다.
 - `main.py`는 앱 초기화·라이프사이클·공통 예외 처리·라우터 등록을 담당한다.
 - 현재 프런트 프록시를 통한 same-origin 통신 구조에서는 CORS 미들웨어를 추가하지 않는다.

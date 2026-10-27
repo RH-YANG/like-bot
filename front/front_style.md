@@ -15,7 +15,6 @@ React 18 · TypeScript · Vite · React Router v6 · Axios · Zustand · CSS Mod
 | `src/util/` | React에 의존하지 않는 공통 로직 |
 | `src/config/` | 설정과 고정 데이터 |
 | `src/asset/` | 이미지·폰트 등 정적 리소스 |
-| `native-asset/` | Android·iOS 앱 아이콘 원본 |
 
 - 한 기능에서만 쓰는 컴포넌트·훅·타입은 해당 기능 폴더에 둔다. 실제로 공유할 때 공통 폴더로 옮긴다.
 - 기능 폴더 루트에는 컨테이너, CSS Module, 전용 훅을 둔다. 파일이 많아지면 `thread/`, `input/`처럼 역할별로 나눈다.
@@ -62,8 +61,6 @@ React 18 · TypeScript · Vite · React Router v6 · Axios · Zustand · CSS Mod
 
 - 공유 타입은 `src/type/`에 도메인별로 정의하고 다른 모듈을 import하지 않는다.
 - API 요청·응답 타입은 백엔드 DTO의 구조·필드명과 일치시킨다.
-- 약관 기능을 구현하는 경우 본문·버전·시행일·필수 여부는 API에서 읽는다. 프런트 번들에 원문을 포함하지 않는다.
-  오픈소스 라이선스 문서는 의존성과 함께 빌드에 포함한다.
 - 객체 타입은 `interface`를 우선하고, 유니온·교차 타입은 `type`을 사용한다.
 - Props는 컴포넌트 파일 상단에 정의한다.
 
@@ -73,30 +70,6 @@ React 18 · TypeScript · Vite · React Router v6 · Axios · Zustand · CSS Mod
 - 조건부 클래스는 템플릿 리터럴을 사용한다: `` `${s.btn} ${isActive ? s.active : ''}` ``.
 - 전역 스타일과 reset은 `App.css`에 작성하고 `App.tsx`에서 import한다. 컴포넌트 스타일은 CSS Module에 둔다.
 - 루트 폰트 크기는 `62.5%`로 설정한다. 기본 브라우저 설정에서 `1rem = 10px`이다.
-- 기본 레이아웃은 모바일 기준으로 작성하고, 크기별 분기는 아래 기준을 사용한다. 미디어쿼리의 크기 단위는 `px`로 쓴다.
-
-| 조건 | 용도 |
-|---|---|
-| `(min-width: 576px)` | 넓은 화면 레이아웃 |
-| `(max-height: 780px)` | 높이가 낮은 화면의 여백 보정 |
-
-모바일에만 높이 보정을 적용하려면 `(max-width: 575px) and (max-height: 780px)`로 제한한다.
-`hover`, `prefers-reduced-motion`처럼 입력 방식·접근성을 위한 조건은 별도로 사용할 수 있다.
-
-## 키보드와 입력 레이아웃
-
-- iOS 키보드의 리사이즈·보조바·높이 구독은 앱 공통 훅에서만 관리한다. 페이지와 입력 컴포넌트에서 네이티브 설정을 변경하거나 종료 시 복원하지 않는다.
-- iOS 문서는 고정하고 `app-scroll` 안에서 페이지를 스크롤한다. 페이지 위치는 `getPageScrollElement()`로 접근한다.
-- 일반 `input`·`textarea`는 앱 공통 처리가 안쪽부터 실제로 스크롤되는 영역을 찾아 가려진 만큼만 이동시킨다. `textarea`는 편집 중인 줄을 기준으로 한다. 별도 키보드 훅이나 `focus`·문서 `scrollTo` 보정을 추가하지 않는다.
-- 작은 입력 모달은 `MiniModal`을 사용한다. 직접 만드는 작은 모달은 이동할 패널에 `data-keyboard-modal`을 지정한다.
-- 채팅처럼 입력 영역을 직접 배치하는 특수 레이아웃만 `data-keyboard-managed`로 기본 보정을 제외하고 공통 `keyboardStore`를 소비한다. 모달·스크롤 영역 밖에 새 입력 레이아웃을 만들면 공통 처리에서 가시성을 검증한다.
-- 배경 높이는 `--app-viewport-height`를 사용한다. iOS 키보드 이동 중 배경을 축소하거나 문서 위치를 강제로 복원하지 않는다.
-
-## 이미지
-
-- WebP를 기본으로 사용한다. 사진·일러스트는 손실 q90, 그라데이션·픽셀아트·플랫 그래픽·로고는 무손실로 변환한다.
-- 변환 명령: `npm run webp -- [--lossless | --quality N] <파일...>`.
-- 손실 변환 후 실기기에서 화질을 확인한다. 20KB 이하 소형 에셋은 변환을 생략할 수 있다.
 
 ## 주석과 빈 줄
 
