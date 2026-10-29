@@ -1,0 +1,17 @@
+.filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.2rem;
+}
+
+.author {
+  white-space: nowrap;
+}
+
+.author button {
+  margin-left: 0.6rem;
+  padding: 0.2rem 0.8rem;
+  font-size: 1.2rem;
+}

@@ -53,13 +53,14 @@ React 18 · TypeScript · Vite · React Router v6 · Axios · Zustand · CSS Mod
 - API 파일의 도메인은 백엔드 엔드포인트를 따른다: `/member/consent` → `memberApi.ts`.
 - API 함수는 React·상태 관리에 의존하지 않으며 응답을 가공하지 않는다. 응답 타입은 제네릭으로 지정한다: `client.post<LoginResponse>(...)`.
 - API 소비 훅은 API 함수를 통해 요청하고 `{ data, isLoading, error, ...handlers }` 형태로 반환한다.
+  단순 조회는 `hook/useApiData`(폴링·재조회 포함), 변경 요청은 `hook/useSubmit`(중복 제출 방지)을 사용한다.
 - 오류는 `ApiError`로 관리한다. 사용자용 `message`와 응답 `status`를 담고, 오류 초기화용 `clearError`를 제공한다.
 - 제출 중 중복 호출을 막고 성공 여부나 결과를 반환한다. 내비게이션은 페이지에서 결정한다.
 - 타이머·이벤트 리스너·이미지 로드 핸들러는 cleanup에서 해제한다. 이미지 로드 등 비동기 작업은 실패 경로도 처리한다.
 
 ## 타입
 
-- 공유 타입은 `src/type/`에 도메인별로 정의하고 다른 모듈을 import하지 않는다.
+- 공유 타입은 `src/type/`에 도메인별로 정의하고 `src/type/` 밖의 모듈을 import하지 않는다. 타입 파일끼리의 `import type`은 허용한다.
 - API 요청·응답 타입은 백엔드 DTO의 구조·필드명과 일치시킨다.
 - 객체 타입은 `interface`를 우선하고, 유니온·교차 타입은 `type`을 사용한다.
 - Props는 컴포넌트 파일 상단에 정의한다.

@@ -67,6 +67,8 @@ CREATE TABLE my_protein (
 - 생성/수정 주체를 남길 때는 `created_by` / `modified_by` (둘 다 `member.id`를 참조하는 FK, 컬럼명은 `member_id` 규칙 예외로 의미를 명확히 한다)
 - 애플리케이션 모델(back의 `schema.py`)에서 필수인 컬럼은 DB도 `NOT NULL`로 선언한다. 두 레이어의 nullable 판단이 어긋나지 않게 유지한다
 - 토큰 등 민감값 컬럼은 원문 대신 SHA-256 해시를 저장한다 (DB 유출 시 원문 보호)
+- 구조가 유동적인 사본·집계는 `jsonb`로 저장한다 (`run.targeting_snapshot`, `run.skip_count`). 조회 조건으로 쓰는 값은 일반 컬럼으로 둔다
+- 조건부 유일성은 부분 UNIQUE 인덱스로 표현하고 이름은 UNIQUE 규칙을 따른다 (`run_platform_uk`)
 
 ### 문서화
 - **테이블 단위**: `COMMENT ON TABLE`로 테이블의 목적을 남긴다 (유지)
@@ -94,7 +96,8 @@ CREATE TABLE my_protein (
 db/
 ├── Dockerfile              # PostgreSQL 이미지 빌드 정의
 ├── db_style.md             # DB 개발 컨벤션 (이 파일)
-└── schema.sql              # 현재 DB 스키마 스냅샷 (git으로 이력 추적)
+├── schema.sql              # 현재 DB 스키마 스냅샷 (git으로 이력 추적)
+└── upgrade.sql             # 기존 DB에 적용할 이번 변경 DDL (변경마다 덮어씀)
 ```
 
 ### 컨테이너 구성
@@ -103,12 +106,12 @@ db/
 
 | 항목 | 값 |
 |---|---|
-| 컨테이너명 | `like-bot-db` (compose 서비스명은 `db` — 내부 네트워크 호스트명으로 사용) |
+| 컨테이너명 | `lbt-db` (compose 서비스명은 `db` — 내부 네트워크 호스트명으로 사용) |
 | 이미지 | `./db/Dockerfile` 빌드 (`postgres:18`) |
 | 포트 | 호스트 `127.0.0.1:5433` → 컨테이너 `5432` |
 | 데이터 볼륨 | named volume `db-data` → `/var/lib/postgresql` (PGDATA: `/var/lib/postgresql/18/docker`) |
 | 타임존 | UTC (Dockerfile `ENV TZ=UTC` — 초기화 시점에 적용) |
-| 네트워크 | `like-bot-net` |
+| 네트워크 | `lbt-net` |
 | Healthcheck | `pg_isready -U ${DB_USER} -d ${DB_NAME}` (10초 간격, 최대 5회, 초기화 유예 30초) |
 
 환경변수(`DB_USER`, `DB_PWD`, `DB_NAME`)는 루트의 `.env`에서 관리한다.
@@ -123,16 +126,25 @@ db/
 
 스키마 변경은 로컬 DB와 스냅샷에 함께 반영한다.
 
-1. `like-bot-db` 컨테이너에서 변경 DDL을 적용한다 (소스 오브 트루스).
-   ```powershell
-   docker compose exec db psql -U like_bot -d like_bot
+1. 변경 DDL을 `db/upgrade.sql`에 작성한다. 이전 내용은 지우고 이번 변경만 `BEGIN; … COMMIT;` 한 트랜잭션으로 쓴다.
+2. `lbt-db` 컨테이너에 적용한다 (소스 오브 트루스). 프로젝트 루트에서 실행한다.
+   ```bash
+   docker exec -i lbt-db sh -c \
+     'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+     < db/upgrade.sql
    ```
-   사용자·DB 이름은 루트 `.env`의 값에 맞춘다. 관련 DDL은 가능한 한 하나의 트랜잭션으로 처리한다.
-2. `schema.sql`에 같은 스키마를 이 문서의 스타일(정렬·인라인 주석·제약조건 네이밍)대로 수기 반영한다.
-3. back의 `schema.py`, DTO, DAO와 관련 테스트를 함께 갱신한다.
+   - 사용자·DB 이름은 컨테이너의 `POSTGRES_USER`·`POSTGRES_DB`(= `.env`의 `DB_USER`·`DB_NAME`)를 쓴다.
+   - 위 명령은 Git Bash·WSL 등 bash 기준이다. PowerShell은 `<` 입력 리다이렉션을 지원하지 않으므로
+     `Get-Content db/upgrade.sql -Raw -Encoding UTF8 | docker exec -i lbt-db sh -c '…'`로 넘기고,
+     한글이 깨지지 않게 먼저 `$OutputEncoding = [Text.UTF8Encoding]::new()`를 설정한다.
+   - `ON_ERROR_STOP`과 트랜잭션으로 중간에 실패하면 아무것도 적용되지 않는다.
+3. `schema.sql`에 같은 스키마를 이 문서의 스타일(정렬·인라인 주석·제약조건 네이밍)대로 수기 반영한다.
+   `ALTER TABLE ... ADD COLUMN`은 실제 DB에서 컬럼이 맨 뒤에 붙지만, 스냅샷은 읽기 좋은 위치에 둬도 된다.
+4. back의 `schema.py`, DTO, DAO와 관련 테스트를 함께 갱신한다.
 
-- `schema.sql`은 빈 DB 볼륨의 최초 초기화에도 사용한다. 기존 DB에는 재빌드·재기동만으로 적용되지 않는다.
-- 별도 변경 SQL 파일을 누적하지 않으며 스키마 변경 이력은 Git에서 확인한다.
+- `schema.sql`은 빈 DB 볼륨의 최초 초기화에도 사용한다. 기존 DB에는 재빌드·재기동만으로 적용되지 않으므로 `upgrade.sql`로 적용한다.
+- `upgrade.sql`은 이번 변경만 담고 변경마다 덮어쓴다. 변경 SQL 파일을 누적하지 않으며 스키마 변경 이력은 Git에서 확인한다.
+- 빈 DB에서 새로 시작할 때는 `schema.sql`이 이미 최신이므로 `upgrade.sql`을 적용하지 않는다.
 - `pg_dump`로 `schema.sql`을 덮어쓰지 않는다. 인라인 주석이 사라져 데이터 사전이 소실된다.
 - DB 백업은 `pg_dump`를 사용한다. 실행 중인 데이터 디렉터리를 단순 복사하지 않는다.
 - `docker compose down`은 데이터를 유지한다. `down -v`는 DB 데이터를 삭제하므로 전체 초기화가 필요할 때만 사용한다.

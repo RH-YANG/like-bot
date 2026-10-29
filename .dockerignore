@@ -1,0 +1,22 @@
+# 비밀값
+.env
+.env.*
+!.env.example
+
+# Git·에디터
+.git
+.vscode
+
+# 의존성·캐시·빌드 산출물
+**/node_modules
+**/dist
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.vite
+
+# 진단 파일
+back/debug
+
+# 문서
+**/*_style.md

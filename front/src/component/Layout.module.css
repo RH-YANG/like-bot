@@ -1,0 +1,48 @@
+.layout {
+  min-height: 100vh;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.6rem;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid #ddd;
+  background: #fff;
+}
+
+.logo {
+  font-size: 1.6rem;
+}
+
+.nav {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.menu {
+  padding: 0.4rem 1rem;
+  border-radius: 0.4rem;
+  color: #333;
+  text-decoration: none;
+}
+
+.active {
+  background: #e8f0fe;
+  color: #1a5fd0;
+  font-weight: 600;
+}
+
+.status {
+  display: flex;
+  gap: 1.6rem;
+  margin-left: auto;
+  font-size: 1.3rem;
+}
+
+.main {
+  max-width: 120rem;
+  margin: 0 auto;
+  padding: 2rem;
+}

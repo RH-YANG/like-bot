@@ -17,13 +17,17 @@ FastAPI + PostgreSQL(psycopg2) 백엔드 개발 컨벤션.
 | `database/schema_enum.py` | 테이블 enum성 컬럼 중 분기·상태 전이에 쓰는 값 목록(`StrEnum`) |
 | `database/dto.py` | API 요청·응답 모델 |
 | `database/dbms_control.py` | DB 커넥션·커서 주입과 반환 |
-| `job/` | 비동기 작업 체인·큐 |
+| `job/` | worker 실행 루프(`run_worker.py`)와 작업 처리(`*_job.py`) |
 | `llm/`, `config/` | LLM 구현, 주제별 조정값 |
 | `env.py`, `main.py` | 환경변수 로드, 앱 초기화와 라우터 등록 |
 
 - 기본 호출 방향은 `api → service → dao`이며 역방향 호출을 금지한다.
 - API는 Job 체인 진입 함수를 호출할 수 있다. Job 구현도 DB 접근은 Service를 거친다.
 - API에서 DAO를 직접 호출하지 않는다. 패키지 폴더에 `__init__.py`를 두지 않는다.
+- API 파일과 라우터는 DB 테이블에 근거한 도메인 단위로 만든다. 테이블명과 꼭 같을 필요는 없고 여러 테이블을 묶을 수 있다
+  (`targeting_api`는 `targeting_set`·`target_keyword`를 다룬다). 테이블 근거가 없는 독립 도메인(`platform_api` 등)은 만들지 않는다.
+  설정값·집계처럼 테이블이 없는 기능은 근거가 되는 도메인에 둔다(예: 좋아요 사용량 → `GET /post/like-usage`).
+  Service도 같은 도메인 또는 그 묶음 단위로 둔다(`targeting_api` → `targeting_service`).
 
 ### API
 
@@ -61,7 +65,17 @@ return chat_room_list
 - Service는 내부 도메인을 위한 레이어이다. 외부 서비스의 인증·API 호출·서명 검증·응답 파싱은 `util/client/`에 둔다.
 - 외부 클라이언트 파일은 `{외부 서비스명}.py`로 명명한다.
 - `util/handler/`에는 각종 핸들러를 위치시킨다.
-- `util/test/`에는 각종 테스트 파일을 위치시킨다.
+- `util/test/`에는 각종 테스트 파일을 위치시킨다. `back` 폴더에서 `python -m pytest util/test`로 실행한다.
+- 브라우저 자동화는 `util/client/{플랫폼}.py`에 둔다. 화면 선택자·라벨은 파일 상단 상수로 모아 화면이 바뀌면 그곳만 고친다.
+- 계정 상태 예외(로그인 풀림·본인 인증·활동 제한)는 `util/handler/platform_exception.py`에 두고, 감지하면 실행을 즉시 멈춘다.
+
+### Worker
+
+- worker는 DB의 `run`을 큐로 쓴다. `pending` 실행을 `FOR UPDATE SKIP LOCKED`로 하나씩 가져와 `running`으로 바꾼다.
+- 실행 조건(목표 개수·키워드·플랫폼 설정)은 실행 중에 `targeting_set`을 다시 읽지 않고 `run.targeting_snapshot`에서 읽는다.
+- 실행 루프는 주기적으로 `run.heartbeat_at`을 갱신하고 그때 중지 요청(`stopping`)을 확인한다.
+  heartbeat가 끊긴 실행은 worker 시작 시와 실행 생성·목록 조회 시 `interrupted`로 정리한다.
+- 좋아요는 결과를 기록할 행을 먼저 저장한 뒤 누르고, 결과에 따라 상태를 바꾼다.
 
 
 ## 2. DB 접근과 트랜잭션

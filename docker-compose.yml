@@ -1,0 +1,111 @@
+name: lbt
+
+services:
+  db:
+    build:
+      context: .
+      dockerfile: db/Dockerfile
+    container_name: lbt-db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PWD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - lbt-net
+
+  back:
+    build:
+      context: .
+      dockerfile: back/Dockerfile
+    image: lbt-back
+    container_name: lbt-back
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PWD: ${DB_PWD}
+      DB_NAME: ${DB_NAME}
+      WATCHFILES_FORCE_POLLING: "true"
+    volumes:
+      - ./back:/app
+    ports:
+      - "127.0.0.1:8001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/openapi.json', timeout=5)"]
+      interval: 30s
+      retries: 3
+      start_period: 20s
+    networks:
+      - lbt-net
+
+  worker:
+    image: lbt-back
+    container_name: lbt-worker
+    command: bash job/start_worker.sh
+    init: true
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PWD: ${DB_PWD}
+      DB_NAME: ${DB_NAME}
+    volumes:
+      - ./back:/app
+      - browser-profile:/data/browser-profile
+    shm_size: 1gb
+    depends_on:
+      db:
+        condition: service_healthy
+      back:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, sys, time; sys.exit(0 if time.time() - os.path.getmtime('/tmp/worker_heartbeat') < 120 else 1)"]
+      interval: 30s
+      retries: 3
+      start_period: 60s
+    networks:
+      - lbt-net
+
+  front:
+    build:
+      context: .
+      dockerfile: front/Dockerfile
+    container_name: lbt-front
+    command: npm run dev -- --host 0.0.0.0 --port 3000
+    environment:
+      API_URL: http://back:8000
+      VNC_URL: http://worker:6080
+    volumes:
+      - ./front/src:/app/src
+      - ./front/index.html:/app/index.html
+      - ./front/vite.config.ts:/app/vite.config.ts
+      - ./front/tsconfig.json:/app/tsconfig.json
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      back:
+        condition: service_healthy
+    networks:
+      - lbt-net
+
+networks:
+  lbt-net:
+    driver: bridge
+
+volumes:
+  db-data:
+  browser-profile:

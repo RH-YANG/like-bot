@@ -35,7 +35,8 @@ playwright-report/
 *.dump
 backup/
 
-# ========== 로그 ==========
+# ========== 로그·진단 ==========
+back/debug/
 *.log
 logs/
 

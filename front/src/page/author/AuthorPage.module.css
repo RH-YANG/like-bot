@@ -1,0 +1,15 @@
+.filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.memo {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.memo input {
+  flex: 1;
+  min-width: 20rem;
+}

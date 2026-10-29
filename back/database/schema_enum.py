@@ -29,11 +29,12 @@ class RunStatus(StrEnum):
 
 
 class RunEndReason(StrEnum):
-    GOAL_REACHED = 'goal_reached'                    # 목표 개수 달성
+    GOAL_REACHED = 'goal_reached'                    # 목표 개수 달성(승인 모드는 승인한 글 처리 완료)
     SEARCH_EXHAUSTED = 'search_exhausted'            # 검색 결과 소진
     MAX_SCAN_REACHED = 'max_scan_reached'            # 최대 검토 게시글 수 도달
     MAX_DURATION_REACHED = 'max_duration_reached'    # 최대 실행 시간 초과
     LIMIT_REACHED = 'limit_reached'                  # 플랫폼 일간·시간당 상한 도달
+    NONE_APPROVED = 'none_approved'                  # 승인 모드에서 승인한 글 없음
     USER_STOPPED = 'user_stopped'                    # 사용자가 중지
     LOGIN_REQUIRED = 'login_required'                # 로그인 풀림
     CHALLENGE_DETECTED = 'challenge_detected'        # 본인 인증·캡차 요구

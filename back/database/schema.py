@@ -21,10 +21,12 @@ class TargetingSet(BaseModel):
 
     goal_count: int = 50                        # 실행 1회 목표 좋아요 수
     max_scan_count: int = 500                   # 실행 1회 최대 검토 게시글 수
+    max_run_minute: int = 150                   # 실행 1회 최대 시간(분)
     max_post_age_hour: Optional[int] = 72       # 게시 후 경과 시간 상한, None이면 제한 없음
     max_like_count: Optional[int] = None        # 반응이 적은 글 위주로 고를 때 사용, None이면 제한 없음
     language: Literal['ko', 'ja', 'en'] = 'ko'  # 대상 게시글 언어
     is_verified_excluded: bool = True           # 인증 배지 계정 제외
+    author_cooldown_day: int = 14               # 같은 작성자에게 다시 좋아요하기까지 최소 일수
 
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

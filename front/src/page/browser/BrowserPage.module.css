@@ -1,0 +1,18 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  height: calc(100vh - 10rem);
+}
+
+.guide {
+  margin: 0;
+}
+
+.frame {
+  flex: 1;
+  width: 100%;
+  border: 1px solid #ddd;
+  border-radius: 0.6rem;
+  background: #333;
+}
